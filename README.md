@@ -23,6 +23,6 @@ sbin/start-all.sh
 
 ##Run the project
 
-`GenericRealTimeProcessor localhost:9092 temperature localhost:7077`
+`GenericRealTimeProcessor localhost:9092 temperature localhost:7077 54.191.40.134 27017 meteor temperatura`
 
-broker1-host:port topic1 spark-master-node-host:port
+broker1-host:port topic1 spark-master-node-host:port mongo-server-ip mongo-server-port database collection

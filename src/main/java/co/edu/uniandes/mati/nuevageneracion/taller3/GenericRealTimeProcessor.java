@@ -1,20 +1,25 @@
 package co.edu.uniandes.mati.nuevageneracion.taller3;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Arrays;
-import java.util.regex.Pattern;
-
+import com.mongodb.MongoClient;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import kafka.serializer.StringDecoder;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.VoidFunction;
+import org.apache.spark.streaming.Durations;
+import org.apache.spark.streaming.api.java.JavaDStream;
+import org.apache.spark.streaming.api.java.JavaPairInputDStream;
+import org.apache.spark.streaming.api.java.JavaStreamingContext;
+import org.apache.spark.streaming.kafka.KafkaUtils;
+import org.bson.Document;
 import scala.Tuple2;
 
-import com.google.common.collect.Lists;
-import kafka.serializer.StringDecoder;
-
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.function.*;
-import org.apache.spark.streaming.api.java.*;
-import org.apache.spark.streaming.kafka.KafkaUtils;
-import org.apache.spark.streaming.Durations;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.logging.Logger;
 
 /**
  * Consumes messages from one or more topics in Kafka and does an insert in a non relational data base called Mongo.
@@ -33,8 +38,6 @@ import org.apache.spark.streaming.Durations;
  */
 public class GenericRealTimeProcessor
 {
-    private static final Pattern SPACE = Pattern.compile(" ");
-
     public static void main(String[] args)
     {
         if (args.length < 2)
@@ -48,6 +51,13 @@ public class GenericRealTimeProcessor
         String brokers = args[0];
         String topics = args[1];
         String sparkMasterNode= args[2];
+
+        //
+        // Mongo connection parameters
+        String mongoServerIp= args[3];
+        String mongoServerPort= args[4];
+        String database= args[5];
+        String topicCollection= args[6];
 
         //
         // Create context with a 2 seconds batch interval
@@ -73,19 +83,30 @@ public class GenericRealTimeProcessor
         // Get the lines, split them into words, count the words and print
         JavaDStream<String> lines = messages.map((Function<Tuple2<String, String>, String>) Tuple2::_2);
 
-
-        JavaDStream<String> words = lines.flatMap((FlatMapFunction<String, String>) x -> Lists.newArrayList(SPACE.split(x)));
-
-
-        JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
-                (PairFunction<String, String, Integer>) s -> new Tuple2<>(s, 1)).reduceByKey(
-                (Function2<Integer, Integer, Integer>) (i1, i2) -> i1 + i2);
-
-        wordCounts.print();
+        lines.foreachRDD((Function<JavaRDD<String>, Void>) rdd -> {
+            rdd.foreach((VoidFunction<String>) s -> {
+                Logger.getAnonymousLogger().info(s);
+                mongoConnection(Integer.parseInt(s),  mongoServerIp, mongoServerPort, database, topicCollection);
+            });
+            return null;
+        });
 
         //
         // Start the computation
         jssc.start();
         jssc.awaitTermination();
+    }
+
+    private static void mongoConnection (Integer sensorValue, String mongoServerIp, String mongoServerPort, String databaseName, String topicCollection)
+    {
+        MongoClient mongoClient = new MongoClient(mongoServerIp, Integer.parseInt(mongoServerPort));
+        MongoDatabase mongoDatabase = mongoClient.getDatabase(databaseName);
+        MongoCollection<Document> collection = mongoDatabase.getCollection(topicCollection);
+
+        Document  document = new Document ("id", "9")
+                .append("value", sensorValue)
+                .append("timestamp", System.currentTimeMillis());
+        collection.insertOne(document);
+
     }
 }
