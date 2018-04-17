@@ -21,6 +21,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.logging.Logger;
 
+import static com.mongodb.client.model.Filters.eq;
+
 /**
  * Consumes messages from one or more topics in Kafka and does an insert in a non relational data base called Mongo.
  * Usage: GenericRealTimeProcessor <brokers> <topics>
@@ -62,7 +64,7 @@ public class GenericRealTimeProcessor
         //
         // Create context with a 2 seconds batch interval
         SparkConf sparkConf = new SparkConf().setAppName("GenericRealTimeProcessor").setMaster("spark://" + sparkMasterNode);
-        JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.seconds(2));
+        JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.milliseconds(500));
 
         HashSet<String> topicsSet = new HashSet<>(Arrays.asList(topics.split(",")));
         HashMap<String, String> kafkaParams = new HashMap<>();
@@ -102,6 +104,11 @@ public class GenericRealTimeProcessor
         MongoClient mongoClient = new MongoClient(mongoServerIp, Integer.parseInt(mongoServerPort));
         MongoDatabase mongoDatabase = mongoClient.getDatabase(databaseName);
         MongoCollection<Document> collection = mongoDatabase.getCollection(topicCollection);
+
+        if (collection.count() > 100 )
+        {
+            collection.findOneAndDelete(eq("id", "9"));
+        }
 
         Document  document = new Document ("id", "9")
                 .append("value", sensorValue)
